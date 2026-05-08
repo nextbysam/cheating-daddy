@@ -111,11 +111,12 @@ async function initializeCliSession({ backend = 'codex', binaryPath = '', extraA
             try {
                 const audioOk = await getLocalAi().initializeAudioOnly(whisperModel, async (transcription) => {
                     if (!transcription || !transcription.trim()) return;
-                    // Whisper special tokens that indicate no real speech — don't burn
-                    // a codex turn on these.
+                    // Whisper special tokens that indicate no real speech —
+                    // [BLANK_AUDIO], [MUSIC PLAYING], [BACKGROUND NOISE], etc.
+                    // Strip anything in square brackets that has no lowercase
+                    // letters (whisper convention for non-speech markers).
                     const cleaned = transcription
-                        .replace(/\[BLANK_AUDIO\]/gi, '')
-                        .replace(/\[(?:NO_SPEECH|SILENCE|MUSIC|INAUDIBLE|background noise)\]/gi, '')
+                        .replace(/\[[^\]a-z]+\]/g, '')
                         .trim();
                     if (!cleaned || cleaned.length < 3) {
                         console.log('[CLI] Skipping non-speech transcription:', transcription);
