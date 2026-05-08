@@ -170,6 +170,26 @@ async function initializeLocal(profile = 'interview') {
     }
 }
 
+async function initializeCli(profile = 'interview') {
+    const prefs = await storage.getPreferences();
+    const opts = {
+        backend: prefs.cliBackend || 'codex',
+        binaryPath: prefs.cliBinaryPath || '',
+        extraArgs: prefs.cliExtraArgs || '',
+        enableAudio: prefs.cliAudioEnabled !== false, // default on
+        whisperModel: prefs.whisperModel || 'Xenova/whisper-small',
+    };
+    const customPrompt = prefs.customPrompt || '';
+    const success = await ipcRenderer.invoke('initialize-cli', opts, profile, customPrompt);
+    if (success) {
+        cheatingDaddy.setStatus(`${opts.backend} CLI Live`);
+        return true;
+    } else {
+        cheatingDaddy.setStatus('error');
+        return false;
+    }
+}
+
 async function initializeCloud(profile = 'interview') {
     const creds = await storage.getCredentials();
     const token = creds.cloudToken;
@@ -1029,6 +1049,7 @@ const cheatingDaddy = {
     initializeGemini,
     initializeCloud,
     initializeLocal,
+    initializeCli,
     startCapture,
     stopCapture,
     sendTextMessage,
