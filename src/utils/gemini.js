@@ -13,7 +13,13 @@ function getLocalAi() {
     return _localai;
 }
 
-// Provider mode: 'byok', 'cloud', or 'local'
+let _cli = null;
+function getCli() {
+    if (!_cli) _cli = require('./cliprovider');
+    return _cli;
+}
+
+// Provider mode: 'byok', 'cloud', 'local', or 'cli'
 let currentProviderMode = 'byok';
 
 // Groq conversation history for context
@@ -706,6 +712,8 @@ async function startMacOSAudioCapture(geminiSessionRef) {
                 sendCloudAudio(monoChunk);
             } else if (currentProviderMode === 'local') {
                 getLocalAi().processLocalAudio(monoChunk);
+            } else if (currentProviderMode === 'cli') {
+                getCli().processCliAudio(monoChunk);
             } else {
                 const base64Data = monoChunk.toString('base64');
                 sendAudioToGemini(base64Data, geminiSessionRef);
@@ -874,7 +882,25 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         return success;
     });
 
+    ipcMain.handle('initialize-cli', async (event, opts, profile, customPrompt) => {
+        currentProviderMode = 'cli';
+        const success = await getCli().initializeCliSession(opts || {}, profile, customPrompt);
+        if (!success) {
+            currentProviderMode = 'byok';
+        }
+        return success;
+    });
+
     ipcMain.handle('send-audio-content', async (event, { data, mimeType }) => {
+        if (currentProviderMode === 'cli') {
+            try {
+                const pcmBuffer = Buffer.from(data, 'base64');
+                getCli().processCliAudio(pcmBuffer);
+                return { success: true };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
         if (currentProviderMode === 'cloud') {
             try {
                 const pcmBuffer = Buffer.from(data, 'base64');
@@ -910,6 +936,15 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
 
     // Handle microphone audio on a separate channel
     ipcMain.handle('send-mic-audio-content', async (event, { data, mimeType }) => {
+        if (currentProviderMode === 'cli') {
+            try {
+                const pcmBuffer = Buffer.from(data, 'base64');
+                getCli().processCliAudio(pcmBuffer);
+                return { success: true };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
         if (currentProviderMode === 'cloud') {
             try {
                 const pcmBuffer = Buffer.from(data, 'base64');
@@ -972,6 +1007,11 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return result;
             }
 
+            if (currentProviderMode === 'cli') {
+                const result = await getCli().sendCliImage(data, prompt);
+                return result;
+            }
+
             // Use HTTP API instead of realtime session
             const result = await sendImageToGeminiHttp(data, prompt);
             return result;
@@ -1003,6 +1043,16 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return await getLocalAi().sendLocalText(text.trim());
             } catch (error) {
                 console.error('Error sending local text:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        if (currentProviderMode === 'cli') {
+            try {
+                console.log('Sending text to CLI:', text);
+                return await getCli().sendCliText(text.trim());
+            } catch (error) {
+                console.error('Error sending CLI text:', error);
                 return { success: false, error: error.message };
             }
         }
@@ -1065,6 +1115,12 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
 
             if (currentProviderMode === 'local') {
                 getLocalAi().closeLocalSession();
+                currentProviderMode = 'byok';
+                return { success: true };
+            }
+
+            if (currentProviderMode === 'cli') {
+                getCli().closeCliSession();
                 currentProviderMode = 'byok';
                 return { success: true };
             }
