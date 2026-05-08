@@ -11,6 +11,9 @@ let isWhisperLoading = false;
 let localConversationHistory = [];
 let currentSystemPrompt = null;
 let isLocalActive = false;
+// When non-null, completed transcriptions go to this callback instead of
+// sendToOllama. The CLI provider sets this to its sendCliText.
+let externalTranscriptionHandler = null;
 
 // VAD state
 let isSpeaking = false;
@@ -200,6 +203,14 @@ async function handleSpeechEnd(audioData) {
     }
 
     sendToRenderer('update-status', 'Generating response...');
+    if (externalTranscriptionHandler) {
+        try {
+            await externalTranscriptionHandler(transcription);
+        } catch (e) {
+            console.error('[LocalAI] External transcription handler error:', e);
+        }
+        return;
+    }
     await sendToOllama(transcription);
 }
 
@@ -332,6 +343,43 @@ function processLocalAudio(monoChunk24k) {
     }
 }
 
+// Lighter init for non-Ollama callers (e.g. the CLI provider). Loads Whisper
+// + VAD only and routes finished transcriptions to the supplied handler
+// instead of Ollama.
+async function initializeAudioOnly(whisperModel, transcriptionHandler) {
+    console.log('[LocalAI] Initializing audio-only pipeline:', { whisperModel });
+    sendToRenderer('session-initializing', true);
+
+    const pipeline = await loadWhisperPipeline(whisperModel || 'Xenova/whisper-small');
+    if (!pipeline) {
+        sendToRenderer('session-initializing', false);
+        return false;
+    }
+
+    // Reset VAD state
+    isSpeaking = false;
+    speechBuffers = [];
+    silenceFrameCount = 0;
+    speechFrameCount = 0;
+    resampleRemainder = Buffer.alloc(0);
+
+    externalTranscriptionHandler = transcriptionHandler;
+    isLocalActive = true; // re-uses processLocalAudio's gate
+    sendToRenderer('session-initializing', false);
+    sendToRenderer('update-status', 'Listening...');
+    return true;
+}
+
+function closeAudioOnly() {
+    isLocalActive = false;
+    externalTranscriptionHandler = null;
+    isSpeaking = false;
+    speechBuffers = [];
+    silenceFrameCount = 0;
+    speechFrameCount = 0;
+    resampleRemainder = Buffer.alloc(0);
+}
+
 function closeLocalSession() {
     console.log('[LocalAI] Closing local session');
     isLocalActive = false;
@@ -434,4 +482,6 @@ module.exports = {
     isLocalSessionActive,
     sendLocalText,
     sendLocalImage,
+    initializeAudioOnly,
+    closeAudioOnly,
 };
