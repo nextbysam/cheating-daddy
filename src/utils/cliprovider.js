@@ -81,10 +81,28 @@ async function initializeCliSession({ backend = 'codex', binaryPath = '', extraA
         cliBackend = backend === 'claude' ? 'claude' : 'codex';
         cliBinary = resolveBinary(cliBackend, binaryPath);
         cliExtraArgs = (extraArgs || '').trim().length > 0 ? extraArgs.trim().split(/\s+/) : [];
-        currentSystemPrompt = getSystemPrompt(profile, customPrompt, false);
+        workspaceDir = ensureWorkspaceDir(workspaceOverride);
+        const baseSystemPrompt = getSystemPrompt(profile, customPrompt, false);
+        // CLI-specific addendum: the agent runs with read-only shell access in
+        // workspaceDir, so it can grep/read related repos for context. Tell it
+        // to do so when the user mentions a project, person, or topic that
+        // might map to a repo on disk.
+        const cliAddendum = `
+
+**Tool use (CLI mode):**
+You are running as a shell agent with read-only filesystem access in \`${workspaceDir}\`.
+When the user mentions a project name, technology, codebase, person's name, or any
+topic where the answer might benefit from on-disk context, ALWAYS first run a quick
+\`ls\` / \`grep\` / \`find\` to look for related repos or files in \`${workspaceDir}\`,
+read what's relevant, then answer with that grounding. Examples:
+- "What's the status of orb-x-watcher?" → \`ls ${workspaceDir}/orb-x-watcher && cat <relevant files>\`
+- "What did I change in null-bites recently?" → \`cd ${workspaceDir}/null-bites && git log --oneline -20\`
+- "How's the headspace fleet wired up?" → grep across headspace-* folders
+Do this silently and concisely — fold the findings into your answer, don't narrate the search.
+If the topic clearly has no on-disk relevance (general knowledge, casual chat), skip the lookup.`;
+        currentSystemPrompt = baseSystemPrompt + cliAddendum;
         currentProfile = profile;
         currentCustomPrompt = customPrompt;
-        workspaceDir = ensureWorkspaceDir(workspaceOverride);
         sessionId = null;
         turnCount = 0;
 
@@ -180,8 +198,11 @@ function buildArgs(prompt, imagePaths = []) {
         return [...baseArgs, ...cliExtraArgs, prompt];
     }
     // claude
+    // Allow read-only filesystem tools so the agent can grep/read repos in
+    // workspaceDir for context. No Edit/Write tools — the spirit is read-only.
     const baseArgs = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages',
-        '--permission-mode', 'dontAsk', '--tools', '',
+        '--permission-mode', 'dontAsk', '--tools', 'Bash,Read,Grep,Glob',
+        '--add-dir', workspaceDir,
         '--append-system-prompt', currentSystemPrompt || ''];
     if (sessionId && turnCount > 0) baseArgs.push('--resume', sessionId);
     return [...baseArgs, ...cliExtraArgs, prompt];
