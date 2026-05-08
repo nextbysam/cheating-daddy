@@ -111,9 +111,20 @@ async function initializeCliSession({ backend = 'codex', binaryPath = '', extraA
             try {
                 const audioOk = await getLocalAi().initializeAudioOnly(whisperModel, async (transcription) => {
                     if (!transcription || !transcription.trim()) return;
-                    console.log('[CLI] Whisper transcribed:', transcription);
+                    // Whisper special tokens that indicate no real speech — don't burn
+                    // a codex turn on these.
+                    const cleaned = transcription
+                        .replace(/\[BLANK_AUDIO\]/gi, '')
+                        .replace(/\[(?:NO_SPEECH|SILENCE|MUSIC|INAUDIBLE|background noise)\]/gi, '')
+                        .trim();
+                    if (!cleaned || cleaned.length < 3) {
+                        console.log('[CLI] Skipping non-speech transcription:', transcription);
+                        sendToRenderer('update-status', `${cliBackend} CLI ready — Listening...`);
+                        return;
+                    }
+                    console.log('[CLI] Whisper transcribed:', cleaned);
                     sendToRenderer('update-status', `${cliBackend} thinking...`);
-                    await sendCliText(transcription);
+                    await sendCliText(cleaned);
                 });
                 audioEnabled = !!audioOk;
             } catch (e) {
