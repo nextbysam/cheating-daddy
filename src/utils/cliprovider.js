@@ -31,6 +31,7 @@ let sessionId = null;            // codex thread_id / claude session_id, capture
 let turnCount = 0;
 let activeProc = null;
 let isCliActive = false;
+let isInitializing = false;      // guards against double-init from rapid Start clicks
 let audioEnabled = false;        // Whisper VAD running for this session
 
 function resolveBinary(backend, override) {
@@ -55,73 +56,81 @@ function ensureWorkspaceDir() {
 }
 
 async function initializeCliSession({ backend = 'codex', binaryPath = '', extraArgs = '', enableAudio = true, whisperModel = 'Xenova/whisper-small' }, profile, customPrompt) {
+    if (isInitializing || isCliActive) {
+        console.log('[CLI] Init refused: already', isInitializing ? 'initializing' : 'active');
+        return isCliActive; // treat as success if already up — UI just re-tried
+    }
     console.log('[CLI] Initializing CLI session:', { backend, binaryPath, profile });
+    isInitializing = true;
     sendToRenderer('session-initializing', true);
 
-    cliBackend = backend === 'claude' ? 'claude' : 'codex';
-    cliBinary = resolveBinary(cliBackend, binaryPath);
-    cliExtraArgs = (extraArgs || '').trim().length > 0 ? extraArgs.trim().split(/\s+/) : [];
-    currentSystemPrompt = getSystemPrompt(profile, customPrompt, false);
-    currentProfile = profile;
-    currentCustomPrompt = customPrompt;
-    workspaceDir = ensureWorkspaceDir();
-    sessionId = null;
-    turnCount = 0;
+    try {
+        cliBackend = backend === 'claude' ? 'claude' : 'codex';
+        cliBinary = resolveBinary(cliBackend, binaryPath);
+        cliExtraArgs = (extraArgs || '').trim().length > 0 ? extraArgs.trim().split(/\s+/) : [];
+        currentSystemPrompt = getSystemPrompt(profile, customPrompt, false);
+        currentProfile = profile;
+        currentCustomPrompt = customPrompt;
+        workspaceDir = ensureWorkspaceDir();
+        sessionId = null;
+        turnCount = 0;
 
-    if (!cliBinary) {
-        sendToRenderer('session-initializing', false);
-        sendToRenderer('update-status', `${cliBackend} CLI not found`);
-        return false;
-    }
-
-    // Smoke-test that the binary runs at all (--version is fast and offline).
-    const ok = await new Promise(resolve => {
-        const test = spawn(cliBinary, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
-        let out = '';
-        test.stdout.on('data', d => (out += d.toString()));
-        test.on('error', err => {
-            console.error('[CLI] Binary check spawn error:', err.message);
-            resolve(false);
-        });
-        test.on('close', code => {
-            console.log(`[CLI] ${cliBackend} --version exit ${code}: ${out.trim()}`);
-            resolve(code === 0);
-        });
-        setTimeout(() => { try { test.kill(); } catch (_) {} resolve(false); }, 5000);
-    });
-
-    if (!ok) {
-        sendToRenderer('session-initializing', false);
-        sendToRenderer('update-status', `${cliBackend} CLI failed to launch (path: ${cliBinary})`);
-        return false;
-    }
-
-    initializeNewSession(profile, customPrompt);
-    isCliActive = true;
-
-    // Optionally start the Whisper VAD pipeline so spoken audio is transcribed
-    // and routed to the CLI as a text turn.
-    audioEnabled = false;
-    if (enableAudio) {
-        try {
-            const ok = await getLocalAi().initializeAudioOnly(whisperModel, async (transcription) => {
-                if (!transcription || !transcription.trim()) return;
-                console.log('[CLI] Whisper transcribed:', transcription);
-                await sendCliText(transcription);
-            });
-            audioEnabled = !!ok;
-        } catch (e) {
-            console.error('[CLI] Audio init failed:', e);
-            audioEnabled = false;
+        if (!cliBinary) {
+            sendToRenderer('update-status', `${cliBackend} CLI not found`);
+            return false;
         }
-    }
 
-    sendToRenderer('session-initializing', false);
-    sendToRenderer('update-status', audioEnabled
-        ? `${cliBackend} CLI ready — Listening...`
-        : `${cliBackend} CLI ready — type to send a message`);
-    console.log('[CLI] Session ready. Workspace:', workspaceDir, 'audio:', audioEnabled);
-    return true;
+        // Smoke-test that the binary runs at all (--version is fast and offline).
+        const ok = await new Promise(resolve => {
+            const test = spawn(cliBinary, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+            let out = '';
+            test.stdout.on('data', d => (out += d.toString()));
+            test.on('error', err => {
+                console.error('[CLI] Binary check spawn error:', err.message);
+                resolve(false);
+            });
+            test.on('close', code => {
+                console.log(`[CLI] ${cliBackend} --version exit ${code}: ${out.trim()}`);
+                resolve(code === 0);
+            });
+            setTimeout(() => { try { test.kill(); } catch (_) {} resolve(false); }, 5000);
+        });
+
+        if (!ok) {
+            sendToRenderer('update-status', `${cliBackend} CLI failed to launch (path: ${cliBinary})`);
+            return false;
+        }
+
+        initializeNewSession(profile, customPrompt);
+        isCliActive = true;
+
+        // Optionally start the Whisper VAD pipeline so spoken audio is transcribed
+        // and routed to the CLI as a text turn.
+        audioEnabled = false;
+        if (enableAudio) {
+            try {
+                const audioOk = await getLocalAi().initializeAudioOnly(whisperModel, async (transcription) => {
+                    if (!transcription || !transcription.trim()) return;
+                    console.log('[CLI] Whisper transcribed:', transcription);
+                    sendToRenderer('update-status', `${cliBackend} thinking...`);
+                    await sendCliText(transcription);
+                });
+                audioEnabled = !!audioOk;
+            } catch (e) {
+                console.error('[CLI] Audio init failed:', e);
+                audioEnabled = false;
+            }
+        }
+
+        sendToRenderer('update-status', audioEnabled
+            ? `${cliBackend} CLI ready — Listening...`
+            : `${cliBackend} CLI ready — type to send a message`);
+        console.log('[CLI] Session ready. Workspace:', workspaceDir, 'audio:', audioEnabled);
+        return true;
+    } finally {
+        isInitializing = false;
+        sendToRenderer('session-initializing', false);
+    }
 }
 
 function processCliAudio(monoChunk24k) {
