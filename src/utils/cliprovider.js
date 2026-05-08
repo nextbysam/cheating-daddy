@@ -97,8 +97,31 @@ grounding pass before answering:
 2. \`cat <repo>/README.md\` and \`ls <repo>/\` to learn what it actually does
 3. \`grep -r --include='*.{md,py,js,ts,json,yaml,toml}' '<keyword>' <repo>\` for specifics
 4. \`git -C <repo> log --oneline -20\` for recent context
-Repos likely to come up: \`null-bite-publisher\`, \`null-bites-public-dashboard\`,
-\`null-bites-pitch-video\`, \`orb-*\`, \`headspace-*\`, \`spoq-*\`, \`hermes-*\`.
+
+**Repo map — KEY TO ACCURACY (use these exact paths):**
+- **Null Bites Lab biology stack** lives at \`null-bytes/ai-nutrition-meat-pipeline\`
+  (NOT \`null-bite-publisher\` — that's the social-media publisher).
+  The bio agent is called **SPOQ-Food**. It runs Claude Agent SDK on Opus.
+  Tools used: **ESMFold** (structure prediction), **ESM-2 pseudo-perplexity**
+  (sequence validation), **BLAST/SwissProt** (novelty), **OpenBio** (229 bio
+  tools), **Biomni SDK** (UniProt/PDB/BLAST), **Tavily** (paper scanning).
+  Codon-optimization scripts live in \`src/codon_optimize.py\`.
+  Named designs to cite by name: **OvaGel-2** (composite 85.9), **CurdPlant-v2**
+  (84.2), **FibroTex-1** (83.1), **ProOligo-1** (81.5), **HemeMax-1** (80.9),
+  **ChymoVerde-1**, **caseimax1**, **FatMimic-1**, **ShrimpSnap-1**, **FoamLock-1**,
+  **BrothGel-1**, **collagenbio1**.
+  27 designs total: 5 wet-lab ready, 6 validated, 5 need optimization, 11 early.
+  29 ESMFold PDB structures, 38 FASTA sequences, 10 codon-optimized DNA constructs.
+  Read \`findings/analyses/master-design-dashboard.json\` for full dashboard,
+  \`findings/breakthrough/<DesignName>-breakthrough.json\` for the technical
+  story of any specific design, \`src/agent-prompt.md\` for mission framing.
+- \`null-bites-public-dashboard\` — Next.js public-facing dashboard
+- \`null-bites-pitch-video\` — Remotion pitch-video render pipeline
+- \`null-bite-publisher\` — multi-account Twitter publishing for Null Bites
+- \`orb-*\` — Orb Cloud product + use-case sites
+- \`headspace-*\` — MicroAGI / Headspace hardware fleet
+- \`spoq-*\` — SPOQ 2.0 (grandma-portal, JIT capability connect)
+- \`hermes-*\` — Orb deploy tooling
 
 **Answer style — MAXIMUM ACCURACY + TECHNICAL DEPTH:**
 - Cite specific things you read: file names, function names, model names,
