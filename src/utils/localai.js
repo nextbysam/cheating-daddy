@@ -194,7 +194,10 @@ async function handleSpeechEnd(audioData) {
         return;
     }
 
+    const t0 = Date.now();
+    console.log(`[LocalAI] Starting transcription (${audioData.length} bytes)...`);
     const transcription = await transcribeAudio(audioData);
+    console.log(`[LocalAI] Transcription took ${Date.now() - t0}ms, result: ${JSON.stringify(transcription || '')}`);
 
     if (!transcription || transcription.trim() === '' || transcription.trim().length < 2) {
         console.log('[LocalAI] Empty transcription, skipping');

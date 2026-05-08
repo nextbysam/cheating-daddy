@@ -69,6 +69,26 @@ function createWindow(sendToRenderer, geminiSessionRef) {
 
     mainWindow.loadFile(path.join(__dirname, '../index.html'));
 
+    // Surface renderer-side errors in the main process console so we can see
+    // them in the dev terminal alongside main-process logs. Without this,
+    // renderer crashes / unhandled errors are silent unless devtools is open.
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+        const tag = ['LOG','DBG','INFO','WARN','ERR'][level] || `L${level}`;
+        if (level >= 2) console.log(`[RENDERER ${tag}] ${message} (${sourceId}:${line})`);
+    });
+    mainWindow.webContents.on('render-process-gone', (_event, details) => {
+        console.error('[RENDERER GONE]', JSON.stringify(details));
+    });
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+        console.error('[RENDERER did-fail-load]', errorCode, errorDescription);
+    });
+    mainWindow.webContents.on('preload-error', (_event, preloadPath, error) => {
+        console.error('[RENDERER preload-error]', preloadPath, error);
+    });
+    if (process.env.DEBUG_CLI) {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+
     // After window is created, initialize keybinds
     mainWindow.webContents.once('dom-ready', () => {
         setTimeout(() => {

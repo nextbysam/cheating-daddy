@@ -15,6 +15,26 @@ function createMainWindow() {
     return mainWindow;
 }
 
+// ── Crash diagnostics ──
+process.on('uncaughtException', err => {
+    console.error('[MAIN] uncaughtException:', err && err.stack ? err.stack : err);
+});
+process.on('unhandledRejection', reason => {
+    console.error('[MAIN] unhandledRejection:', reason && reason.stack ? reason.stack : reason);
+});
+app.on('render-process-gone', (event, webContents, details) => {
+    console.error('[MAIN] render-process-gone:', JSON.stringify(details));
+});
+app.on('child-process-gone', (event, details) => {
+    console.error('[MAIN] child-process-gone:', JSON.stringify(details));
+});
+app.on('before-quit', () => {
+    console.log('[MAIN] before-quit fired — app is exiting');
+});
+app.on('will-quit', () => {
+    console.log('[MAIN] will-quit fired');
+});
+
 app.whenReady().then(async () => {
     // Initialize storage (checks version, resets if needed)
     storage.initializeStorage();
