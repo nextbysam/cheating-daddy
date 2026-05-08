@@ -55,7 +55,7 @@ function ensureWorkspaceDir() {
     return dir;
 }
 
-async function initializeCliSession({ backend = 'codex', binaryPath = '', extraArgs = '', enableAudio = true, whisperModel = 'Xenova/whisper-small' }, profile, customPrompt) {
+async function initializeCliSession({ backend = 'codex', binaryPath = '', extraArgs = '', enableAudio = true, whisperModel = 'Xenova/whisper-tiny' }, profile, customPrompt) {
     if (isInitializing || isCliActive) {
         console.log('[CLI] Init refused: already', isInitializing ? 'initializing' : 'active');
         return isCliActive; // treat as success if already up — UI just re-tried
