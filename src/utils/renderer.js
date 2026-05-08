@@ -178,6 +178,7 @@ async function initializeCli(profile = 'interview') {
         extraArgs: prefs.cliExtraArgs || '',
         enableAudio: prefs.cliAudioEnabled !== false, // default on
         whisperModel: prefs.cliWhisperModel || 'Xenova/whisper-tiny',
+        workspaceDir: prefs.cliWorkspaceDir || '',
     };
     const customPrompt = prefs.customPrompt || '';
     const success = await ipcRenderer.invoke('initialize-cli', opts, profile, customPrompt);

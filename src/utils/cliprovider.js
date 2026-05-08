@@ -47,15 +47,28 @@ function resolveBinary(backend, override) {
     return backend; // fall back to PATH lookup
 }
 
-function ensureWorkspaceDir() {
-    const dir = path.join(app.getPath('userData'), 'cli-workspace');
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+function ensureWorkspaceDir(override) {
+    // User wants codex/claude to spawn inside their actual programming folder
+    // so the agent can Read/Grep related repos when answering questions.
+    // Override comes from prefs (cliWorkspaceDir); falls back to a sensible
+    // default. If the path doesn't exist, create it (mkdir -p).
+    const home = os.homedir();
+    const candidate = (override && override.trim())
+        || path.join(home, 'workspaces', 'programming');
+    try {
+        if (!fs.existsSync(candidate)) {
+            fs.mkdirSync(candidate, { recursive: true });
+        }
+        return candidate;
+    } catch (e) {
+        console.error('[CLI] ensureWorkspaceDir failed for', candidate, '→ falling back to userData:', e.message);
+        const fallback = path.join(app.getPath('userData'), 'cli-workspace');
+        if (!fs.existsSync(fallback)) fs.mkdirSync(fallback, { recursive: true });
+        return fallback;
     }
-    return dir;
 }
 
-async function initializeCliSession({ backend = 'codex', binaryPath = '', extraArgs = '', enableAudio = true, whisperModel = 'Xenova/whisper-tiny' }, profile, customPrompt) {
+async function initializeCliSession({ backend = 'codex', binaryPath = '', extraArgs = '', enableAudio = true, whisperModel = 'Xenova/whisper-tiny', workspaceDir: workspaceOverride = '' }, profile, customPrompt) {
     if (isInitializing || isCliActive) {
         console.log('[CLI] Init refused: already', isInitializing ? 'initializing' : 'active');
         return isCliActive; // treat as success if already up — UI just re-tried
@@ -71,7 +84,7 @@ async function initializeCliSession({ backend = 'codex', binaryPath = '', extraA
         currentSystemPrompt = getSystemPrompt(profile, customPrompt, false);
         currentProfile = profile;
         currentCustomPrompt = customPrompt;
-        workspaceDir = ensureWorkspaceDir();
+        workspaceDir = ensureWorkspaceDir(workspaceOverride);
         sessionId = null;
         turnCount = 0;
 
