@@ -8,5 +8,6 @@ export { CustomizeView } from './views/CustomizeView.js';
 export { HelpView } from './views/HelpView.js';
 export { HistoryView } from './views/HistoryView.js';
 export { AssistantView } from './views/AssistantView.js';
+export { NotchView } from './views/NotchView.js';
 export { OnboardingView } from './views/OnboardingView.js';
 export { AdvancedView } from './views/AdvancedView.js';

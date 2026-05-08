@@ -4,6 +4,7 @@ import { CustomizeView } from '../views/CustomizeView.js';
 import { HelpView } from '../views/HelpView.js';
 import { HistoryView } from '../views/HistoryView.js';
 import { AssistantView } from '../views/AssistantView.js';
+import { NotchView } from '../views/NotchView.js';
 import { OnboardingView } from '../views/OnboardingView.js';
 import { AICustomizeView } from '../views/AICustomizeView.js';
 import { FeedbackView } from '../views/FeedbackView.js';
@@ -622,8 +623,27 @@ export class CheatingDaddyApp extends LitElement {
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
         this.sessionActive = true;
-        this.currentView = 'assistant';
+        // CLI mode opens the small notch by default; other providers keep the
+        // full assistant view since their UX expects the rectangular layout.
+        const isCli = providerMode === 'cli';
+        this.currentView = isCli ? 'notch' : 'assistant';
+        if (isCli) {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                await ipcRenderer.invoke('window-set-mode', 'notch');
+            } catch (_) {}
+        }
         this._startTimer();
+    }
+
+    async handleNotchModeChange(mode) {
+        // mode: 'notch' | 'expanded' | 'full'
+        try {
+            const { ipcRenderer } = window.require('electron');
+            await ipcRenderer.invoke('window-set-mode', mode);
+        } catch (_) {}
+        if (mode === 'full') this.currentView = 'assistant';
+        else this.currentView = 'notch';
     }
 
     async handleAPIKeyHelp() {
@@ -783,6 +803,18 @@ export class CheatingDaddyApp extends LitElement {
                     ></assistant-view>
                 `;
 
+            case 'notch':
+                return html`
+                    <notch-view
+                        .responses=${this.responses}
+                        .currentResponseIndex=${this.currentResponseIndex}
+                        .status=${this.statusText}
+                        .onExpandFull=${() => this.handleNotchModeChange('full')}
+                        .onSendText=${msg => this.handleSendText(msg)}
+                        @notch-mode-change=${e => this.handleNotchModeChange(e.detail.mode)}
+                    ></notch-view>
+                `;
+
             default:
                 return html`<div>Unknown view: ${this.currentView}</div>`;
         }
@@ -866,6 +898,16 @@ export class CheatingDaddyApp extends LitElement {
     render() {
         // Onboarding is fullscreen, no sidebar
         if (this.currentView === 'onboarding') {
+            return html`
+                <div class="fullscreen">
+                    ${this.renderCurrentView()}
+                </div>
+            `;
+        }
+
+        // Notch view is also fullscreen — no sidebar, no traffic lights, no
+        // top drag bar. The notch component fills the (small) window itself.
+        if (this.currentView === 'notch') {
             return html`
                 <div class="fullscreen">
                     ${this.renderCurrentView()}

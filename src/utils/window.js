@@ -334,6 +334,36 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
         }
     });
 
+    ipcMain.handle('window-set-mode', async (_event, mode) => {
+        // mode: 'notch' | 'expanded' | 'full'
+        // notch    — small pill pinned to top center (default after Start)
+        // expanded — same width as notch, taller, for showing a streaming response
+        // full     — original 1100x800 centered, the rectangular UI
+        if (mainWindow.isDestroyed()) return { success: false };
+        try {
+            const display = screen.getPrimaryDisplay();
+            const wa = display.workArea;
+            let bounds;
+            if (mode === 'full') {
+                const w = Math.min(1100, wa.width - 40);
+                const h = Math.min(800, wa.height - 60);
+                bounds = { x: wa.x + Math.round((wa.width - w) / 2), y: wa.y + Math.round((wa.height - h) / 2), width: w, height: h };
+            } else if (mode === 'expanded') {
+                const w = 520, h = 360;
+                bounds = { x: wa.x + Math.round((wa.width - w) / 2), y: wa.y + 12, width: w, height: h };
+            } else {
+                // notch
+                const w = 520, h = 56;
+                bounds = { x: wa.x + Math.round((wa.width - w) / 2), y: wa.y + 12, width: w, height: h };
+            }
+            mainWindow.setBounds(bounds, true);
+            return { success: true, bounds };
+        } catch (e) {
+            console.error('window-set-mode error:', e);
+            return { success: false, error: e.message };
+        }
+    });
+
     ipcMain.handle('toggle-window-visibility', async event => {
         try {
             if (mainWindow.isDestroyed()) {
