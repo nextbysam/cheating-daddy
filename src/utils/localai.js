@@ -131,13 +131,12 @@ async function loadWhisperPipeline(modelName) {
         const { app } = require('electron');
         const path = require('path');
         env.cacheDir = path.join(app.getPath('userData'), 'whisper-models');
-        // Force CPU/WASM. `device: 'auto'` was selecting WebGPU/CoreML
-        // inside Electron and SIGKILLing on first inference (no JS error,
-        // no crash event — process just vanished). CPU is slower but stable.
-        whisperPipeline = await pipeline('automatic-speech-recognition', modelName, {
-            dtype: 'q8',
-            device: 'cpu',
-        });
+        // Use library defaults (fp32 + WASM/cpu). The earlier q8 + device:'auto'
+        // combo was SIGKILLing the main process on first inference with no JS
+        // error and no Electron crash event — classic native segfault inside
+        // ONNX runtime on this macOS/Electron build. Default fp32 is bigger
+        // memory-wise but stable.
+        whisperPipeline = await pipeline('automatic-speech-recognition', modelName);
         console.log('[LocalAI] Whisper model loaded — running warmup inference...');
 
         // Warm up with a 1-second silent buffer. If the runtime is going to
@@ -150,8 +149,6 @@ async function loadWhisperPipeline(modelName) {
             console.log(`[LocalAI] Warmup ok (${Date.now() - t0}ms)`);
         } catch (warmupErr) {
             console.error('[LocalAI] Warmup inference failed:', warmupErr);
-            // Don't fail the whole load — first real inference might still work,
-            // but we now have a logged trace if it doesn't.
         }
 
         console.log('[LocalAI] Whisper ready');
