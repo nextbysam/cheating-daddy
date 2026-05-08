@@ -499,6 +499,10 @@ export class MainView extends LitElement {
         _ollamaModel: { state: true },
         _whisperModel: { state: true },
         _showLocalHelp: { state: true },
+        // CLI state
+        _cliBackend: { state: true },
+        _cliBinaryPath: { state: true },
+        _cliExtraArgs: { state: true },
     };
 
     constructor() {
@@ -521,6 +525,9 @@ export class MainView extends LitElement {
         this._ollamaHost = 'http://127.0.0.1:11434';
         this._ollamaModel = 'llama3.1';
         this._whisperModel = 'Xenova/whisper-small';
+        this._cliBackend = 'codex';
+        this._cliBinaryPath = '';
+        this._cliExtraArgs = '';
 
         this._animId = null;
         this._time = 0;
@@ -555,6 +562,11 @@ export class MainView extends LitElement {
             this._ollamaHost = prefs.ollamaHost || 'http://127.0.0.1:11434';
             this._ollamaModel = prefs.ollamaModel || 'llama3.1';
             this._whisperModel = prefs.whisperModel || 'Xenova/whisper-small';
+
+            // Load CLI settings
+            this._cliBackend = prefs.cliBackend || 'codex';
+            this._cliBinaryPath = prefs.cliBinaryPath || '';
+            this._cliExtraArgs = prefs.cliExtraArgs || '';
 
             this.requestUpdate();
         } catch (e) {
@@ -743,6 +755,24 @@ export class MainView extends LitElement {
         this.requestUpdate();
     }
 
+    async _saveCliBackend(val) {
+        this._cliBackend = val;
+        await cheatingDaddy.storage.updatePreference('cliBackend', val);
+        this.requestUpdate();
+    }
+
+    async _saveCliBinaryPath(val) {
+        this._cliBinaryPath = val;
+        await cheatingDaddy.storage.updatePreference('cliBinaryPath', val);
+        this.requestUpdate();
+    }
+
+    async _saveCliExtraArgs(val) {
+        this._cliExtraArgs = val;
+        await cheatingDaddy.storage.updatePreference('cliExtraArgs', val);
+        this.requestUpdate();
+    }
+
     _handleProfileChange(e) {
         this.onProfileChange(e.target.value);
     }
@@ -763,13 +793,15 @@ export class MainView extends LitElement {
             if (!this._ollamaHost.trim()) {
                 return;
             }
+        } else if (this._mode === 'cli') {
+            // CLI mode just needs a backend selected (codex / claude). No keys.
         }
 
         this.onStart();
     }
 
     triggerApiKeyError() {
-        this._keyError = this._mode !== 'local';
+        this._keyError = this._mode === 'byok';
         this.requestUpdate();
         setTimeout(() => {
             this._tokenError = false;
@@ -854,6 +886,55 @@ export class MainView extends LitElement {
 
             <div class="mode-links">
                 <button class="mode-link" @click=${() => this._saveMode('local')}>Use local AI</button>
+                <button class="mode-link" @click=${() => this._saveMode('cli')}>Use CLI (Codex / Claude)</button>
+            </div>
+        `;
+    }
+
+    // ── CLI mode (Codex / Claude Code) ──
+
+    _renderCliMode() {
+        return html`
+            <div class="form-group">
+                <label class="form-label">Backend</label>
+                <select
+                    .value=${this._cliBackend}
+                    @change=${e => this._saveCliBackend(e.target.value)}
+                >
+                    <option value="codex" ?selected=${this._cliBackend === 'codex'}>Codex CLI</option>
+                    <option value="claude" ?selected=${this._cliBackend === 'claude'}>Claude Code</option>
+                </select>
+                <div class="form-hint">Uses your installed CLI's auth — no API key needed</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Binary path (optional)</label>
+                <input
+                    type="text"
+                    placeholder="${this._cliBackend === 'claude' ? '/usr/local/bin/claude' : '/opt/homebrew/bin/codex'}"
+                    .value=${this._cliBinaryPath}
+                    @input=${e => this._saveCliBinaryPath(e.target.value)}
+                />
+                <div class="form-hint">Leave blank to auto-detect from PATH</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Extra args (optional)</label>
+                <input
+                    type="text"
+                    placeholder="${this._cliBackend === 'claude' ? '--model sonnet' : '-m gpt-5-codex'}"
+                    .value=${this._cliExtraArgs}
+                    @input=${e => this._saveCliExtraArgs(e.target.value)}
+                />
+                <div class="form-hint">Space-separated. Type prompts in chat — audio is disabled in CLI mode.</div>
+            </div>
+
+            ${this._renderStartButton()}
+            ${this._renderDivider()}
+
+            <div class="mode-links">
+                <button class="mode-link" @click=${() => this._saveMode('byok')}>Use own API keys</button>
+                <button class="mode-link" @click=${() => this._saveMode('local')}>Use local AI</button>
             </div>
         `;
     }
@@ -908,6 +989,7 @@ export class MainView extends LitElement {
 
             <div class="mode-links">
                 <button class="mode-link" @click=${() => this._saveMode('byok')}>Use own API keys</button>
+                <button class="mode-link" @click=${() => this._saveMode('cli')}>Use CLI (Codex / Claude)</button>
             </div>
         `;
     }
@@ -925,18 +1007,25 @@ export class MainView extends LitElement {
                         <div class="page-title">Cheating Daddy <span class="mode-suffix">Local AI</span></div>
                         <button class="help-btn" @click=${() => { this._showLocalHelp = !this._showLocalHelp; }}>${this._showLocalHelp ? closeIcon : helpIcon}</button>
                     </div>
+                ` : this._mode === 'cli' ? html`
+                    <div class="page-title">Cheating Daddy <span class="mode-suffix">CLI</span></div>
                 ` : html`
                     <div class="page-title">
                         ${html`Cheating Daddy <span class="mode-suffix">BYOK</span>`}
                     </div>
                 `}
                 <div class="page-subtitle">
-                    ${this._mode === 'byok' ? 'Bring your own API keys' : 'Run models locally on your machine'}
+                    ${this._mode === 'byok'
+                        ? 'Bring your own API keys'
+                        : this._mode === 'cli'
+                            ? `Use your local ${this._cliBackend === 'claude' ? 'Claude Code' : 'Codex'} CLI as the model`
+                            : 'Run models locally on your machine'}
                 </div>
 
                 <!-- Cloud mode render branch intentionally disabled. -->
                 ${this._mode === 'byok' ? this._renderByokMode() : ''}
                 ${this._mode === 'local' ? (this._showLocalHelp ? this._renderLocalHelp() : this._renderLocalMode()) : ''}
+                ${this._mode === 'cli' ? this._renderCliMode() : ''}
             </div>
         `;
     }

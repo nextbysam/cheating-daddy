@@ -595,6 +595,15 @@ export class CheatingDaddyApp extends LitElement {
                 }
                 return;
             }
+        } else if (providerMode === 'cli') {
+            const success = await cheatingDaddy.initializeCli(this.selectedProfile);
+            if (!success) {
+                const mainView = this.shadowRoot.querySelector('main-view');
+                if (mainView && mainView.triggerApiKeyError) {
+                    mainView.triggerApiKeyError();
+                }
+                return;
+            }
         } else {
             const apiKey = await cheatingDaddy.storage.getApiKey();
             if (!apiKey || apiKey === '') {
